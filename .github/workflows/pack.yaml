@@ -70,7 +70,7 @@ jobs:
         run: dotnet nuget push "**/*.nupkg" -k ${{ steps.login.outputs.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json
 
       - name: Publish artifact
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v5
         with:
           name: packaged-template
           path: ./src/package
