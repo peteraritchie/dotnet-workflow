@@ -5,24 +5,27 @@ on:
     branches:
       - main
     paths-ignore:
-      - '**/*.md'
-      - '**/*.gitignore'
-      - '**/*.gitattributes'
+      - "**/*.md"
+      - "**/*.gitignore"
+      - "**/*.gitattributes"
   workflow_dispatch:
     branches:
       - main
     paths-ignore:
-      - '**/*.md'
-      - '**/*.gitignore'
-      - '**/*.gitattributes'
+      - "**/*.md"
+      - "**/*.gitignore"
+      - "**/*.gitattributes"
 
 env:
-  PACKAGE_PATH: './package'
-      
+  PACKAGE_PATH: "./package"
+
 jobs:
   dotnet_workflow:
-    name: Pack 
-    runs-on: windows-latest
+    name: Pack
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -34,33 +37,40 @@ jobs:
       TERM: xterm
 
     steps:
-    - uses: actions/checkout@v4
-      
-    - name: Setup .NET Core SDK
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
+      - uses: actions/checkout@v5
 
-    - name: Pack
-      working-directory: src
-      run: dotnet pack -o ${{ env.PACKAGE_PATH }}
+      - name: Setup .NET Core SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
 
-    - name: Get certificate
-      id: cert_file
-      uses: timheuer/base64-to-file@v1
-      with:
-          fileName: 'certfile.pfx'
+      - name: Pack
+        working-directory: src
+        run: dotnet pack -o ${{ env.PACKAGE_PATH }}
+
+      - name: Get certificate
+        id: cert_file
+        uses: timheuer/base64-to-file@v1
+        with:
+          fileName: "certfile.pfx"
           encodedString: ${{ secrets.SIGNING_CERT }}
 
-    # Sign the package
-    - name: Sign NuGet Package
-      run: dotnet nuget sign "**/*.nupkg" --certificate-path ${{ steps.cert_file.outputs.filePath }} --certificate-password "${{ secrets.CERT_PWD }}" --timestamper http://timestamp.digicert.com
+      # Get a short-lived NuGet API key
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{secrets.NUGET_USER}}
 
-    - name: Publish NuGet package
-      run: dotnet nuget push "**/*.nupkg" -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json
+      # Sign the package
+      - name: Sign NuGet Package
+        run: dotnet nuget sign "**/*.nupkg" --certificate-path ${{ steps.cert_file.outputs.filePath }} --certificate-password "${{ secrets.CERT_PWD }}" --timestamper http://timestamp.digicert.com
 
-    - name: Publish artifact
-      uses: actions/upload-artifact@master
-      with:
-        name: packaged-template
-        path: ./src/package
+      - name: Publish NuGet package
+        run: dotnet nuget push "**/*.nupkg" -k ${{ steps.login.outputs.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json
+
+      - name: Publish artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: packaged-template
+          path: ./src/package
